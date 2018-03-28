@@ -23,7 +23,6 @@ readonly RED_UL='\033[38;4;31m'
 readonly YELLOW='\033[38;33m'
 readonly YELLOW_UL='\033[38;4;33m'
 
-readonly CORES=$(sysctl -n hw.ncpu)
 readonly NIX_USER_COUNT="32"
 readonly NIX_BUILD_GROUP_ID="30000"
 readonly NIX_BUILD_GROUP_NAME="nixbld"
@@ -408,9 +407,6 @@ EOF
 }
 
 setup_report() {
-    header "hardware report"
-    row "           Cores" "$CORES"
-
     header "Nix config report"
     row "        Temp Dir" "$SCRATCH"
     row "        Nix Root" "$NIX_ROOT"
