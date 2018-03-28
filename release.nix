@@ -139,11 +139,13 @@ let
             shellcheck -e SC1090 $TMPDIR/install
             shellcheck -e SC1091,SC2002 $TMPDIR/install-darwin-multi-user
             shellcheck -e SC1091,SC2002 $TMPDIR/install-centos7-multi-user
+            shellcheck -x -e SC1091,SC2002 $TMPDIR/install-multi-user
           fi
 
           chmod +x $TMPDIR/install
           chmod +x $TMPDIR/install-darwin-multi-user
           chmod +x $TMPDIR/install-centos7-multi-user
+          chmod +x $TMPDIR/install-multi-user
           dir=nix-${version}-${system}
           fn=$out/$dir.tar.bz2
           mkdir -p $out/nix-support
