@@ -72,7 +72,7 @@ uninstall_directions() {
         cat <<EOF
 $step. Delete $SERVICE_DEST
 
-  sudo systemctl stop nix-daemon
+  sudo systemctl stop nix-daemon.service
   sudo systemctl daemon-reload
   sudo rm $SERVICE_DEST
 
@@ -84,7 +84,7 @@ EOF
         cat <<EOF
 $step. Delete $SOCKET_DEST
 
-  sudo systemctl stop nix-daemon
+  sudo systemctl stop nix-daemon.socket
   sudo systemctl daemon-reload
   sudo rm $SOCKET_DEST
 
@@ -767,16 +767,19 @@ EOF
 
 configure_nix_daemon_plist() {
     _sudo "to set up the nix-daemon service" \
-          ln -sfn "/nix/var/nix/profiles/default$SERVICE_SRC" "$SERVICE_DEST"
+          systemctl link "/nix/var/nix/profiles/default$SERVICE_SRC"
 
     _sudo "to set up the nix-daemon socket service" \
-          ln -sfn "/nix/var/nix/profiles/default$SOCKET_SRC" "$SOCKET_DEST"
+          systemctl enable "/nix/var/nix/profiles/default$SOCKET_SRC"
 
     _sudo "to load the systemd unit for nix-daemon" \
           systemctl daemon-reload
 
-    _sudo "to start the nix-daemon" \
-          systemctl start nix-daemon
+    _sudo "to start the nix-daemon.socket" \
+          systemctl start nix-daemon.socket
+
+    _sudo "to start the nix-daemon.service" \
+          systemctl start nix-daemon.service
 
 }
 
