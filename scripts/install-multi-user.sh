@@ -731,18 +731,18 @@ EOF
 }
 
 main() {
-    welcome_to_nix
-    chat_about_sudo
-
     if [ "$(uname -s)" = "Darwin" ]; then
         # shellcheck source=./install-darwin-multi-user.sh
         . "$EXTRACTED_NIX_PATH/install-darwin-multi-user.sh"
-    elif [ "$(uname -s)" = "Linux" ] && grep -q /proc/1/cmdline systemd; then
+    elif [ "$(uname -s)" = "Linux" ] && grep -q systemd /proc/1/cmdline; then
         # shellcheck source=./install-centos7-multi-user.sh
         . "$EXTRACTED_NIX_PATH/install-centos7-multi-user.sh"
     else
         failure "Sorry, I don't know what to do on $(uname)"
     fi
+
+    welcome_to_nix
+    chat_about_sudo
 
     if [ "${ALLOW_PREEXISTING_INSTALLATION:-}" = "" ]; then
         validate_starting_assumptions

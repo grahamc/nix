@@ -127,24 +127,26 @@ let
           substitute ${./scripts/install-nix-from-closure.sh} $TMPDIR/install \
             --subst-var-by nix ${toplevel} \
             --subst-var-by cacert ${cacert}
-          substitute ${./scripts/install-darwin-multi-user.sh} $TMPDIR/install-darwin-multi-user \
+          substitute ${./scripts/install-darwin-multi-user.sh} $TMPDIR/install-darwin-multi-user.sh \
             --subst-var-by nix ${toplevel} \
             --subst-var-by cacert ${cacert}
-          substitute ${./scripts/install-centos7-multi-user.sh} $TMPDIR/install-centos7-multi-user \
+          substitute ${./scripts/install-centos7-multi-user.sh} $TMPDIR/install-centos7-multi-user.sh \
             --subst-var-by nix ${toplevel} \
             --subst-var-by cacert ${cacert}
-
+          substitute ${./scripts/install-multi-user.sh} $TMPDIR/install-multi-user \
+            --subst-var-by nix ${toplevel} \
+            --subst-var-by cacert ${cacert}
 
           if type -p shellcheck; then
             shellcheck -e SC1090 $TMPDIR/install
-            shellcheck -e SC1091,SC2002 $TMPDIR/install-darwin-multi-user
-            shellcheck -e SC1091,SC2002 $TMPDIR/install-centos7-multi-user
-            shellcheck -x -e SC1091,SC2002 $TMPDIR/install-multi-user
+            shellcheck $TMPDIR/install-darwin-multi-user.sh
+            shellcheck $TMPDIR/install-centos7-multi-user.sh
+            shellcheck -x -e SC1091,SC2002,SC2116 $TMPDIR/install-multi-user
           fi
 
           chmod +x $TMPDIR/install
-          chmod +x $TMPDIR/install-darwin-multi-user
-          chmod +x $TMPDIR/install-centos7-multi-user
+          chmod +x $TMPDIR/install-darwin-multi-user.sh
+          chmod +x $TMPDIR/install-centos7-multi-user.sh
           chmod +x $TMPDIR/install-multi-user
           dir=nix-${version}-${system}
           fn=$out/$dir.tar.bz2
@@ -157,8 +159,9 @@ let
             --transform "s,$TMPDIR/install,$dir/install," \
             --transform "s,$TMPDIR/reginfo,$dir/.reginfo," \
             --transform "s,$NIX_STORE,$dir/store,S" \
-            $TMPDIR/install $TMPDIR/install-darwin-multi-user \
-            $TMPDIR/install-centos7-multi-user $TMPDIR/reginfo \
+            $TMPDIR/install $TMPDIR/install-darwin-multi-user.sh \
+            $TMPDIR/install-centos7-multi-user.sh \
+            $TMPDIR/install-multi-user $TMPDIR/reginfo \
             $(cat ${installerClosureInfo}/store-paths)
         '');
 

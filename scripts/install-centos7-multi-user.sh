@@ -16,19 +16,19 @@ poly_validate_assumptions() {
 }
 
 poly_service_installed_check() {
-    # !!! TODO: check use systemd is-linked / is-installed maybe?
-    [ -e "$SERVICE_DEST" ] || [ -e "$SOCKET_DEST" ]
+    [ "$(systemctl is-enabled nix-daemon.service)" = "linked" ] \
+        || [ "$(systemctl is-enabled nix-daemon.socket)" = "enabled" ]
 }
 
 poly_service_uninstall_directions() {
         cat <<EOF
-$1. Delete $SERVICE_DEST and $SOCKET_DEST
+$1. Delete the systemd service and socket units
 
-  !!! TODO Don't rm, use disable and unlink???
-  sudo systemctl stop nix-daemon.service
   sudo systemctl stop nix-daemon.socket
+  sudo systemctl stop nix-daemon.service
+  sudo systemctl disable nix-daemon.socket
+  sudo systemctl disable nix-daemon.service
   sudo systemctl daemon-reload
-  sudo rm $SERVICE_DEST $SOCKET_DEST
 EOF
 }
 
@@ -40,7 +40,7 @@ poly_service_setup_note() {
 EOF
 }
 
-polxy_configure_nix_daemon_service() {
+poly_configure_nix_daemon_service() {
     _sudo "to set up the nix-daemon service" \
           systemctl link "/nix/var/nix/profiles/default$SERVICE_SRC"
 
@@ -81,7 +81,7 @@ poly_user_id_get() {
 }
 
 poly_user_hidden_get() {
-    1
+    echo "1"
 }
 
 poly_user_hidden_set() {
