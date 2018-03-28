@@ -34,6 +34,18 @@ if [ "$(uname -s)" = "Darwin" ]; then
     exit 0
 fi
 
+# CentOS 7 support
+if [ "$(uname -s)" = "Linux" ]; then
+    vers=$(awk -F= 'BEGIN {ORS="" }
+                    $1=="ID" || $1=="VERSION_ID" {print $2}' \
+               /etc/os-release)
+    if [ "$vers" = '"centos""7"' ]; then
+        printf '\e[1;31mSwitching to the Multi-User Installer\e[0m\n'
+        exec "$self/install-centos7-multi-user"
+        exit 0
+    fi
+fi
+
 if [ "$(id -u)" -eq 0 ]; then
     printf '\e[1;31mwarning: installing Nix as root is not supported by this script!\e[0m\n'
 fi
