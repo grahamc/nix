@@ -40,7 +40,145 @@ readonly NIX_INSTALLED_NIX="@nix@"
 readonly NIX_INSTALLED_CACERT="@cacert@"
 readonly EXTRACTED_NIX_PATH="$(dirname "$0")"
 
-readonly ROOT_HOME="/var/root"
+readonly ROOT_HOME=$(echo ~root)
+
+dsclattr() {
+    /usr/bin/dscl . -read "$1" \
+        | awk "/$2/ { print \$2 }"
+}
+
+poly_validate_assumptions() {
+    if [ "$(uname -s)" != "Darwin" ]; then
+        failure "This script is for use with macOS!"
+    fi
+}
+
+poly_service_installed_check() {
+    return [ -e "$PLIST_DEST" ]
+}
+
+poly_service_uninstall_directions() {
+        cat <<EOF
+$1. Delete $PLIST_DEST
+
+  sudo launchctl unload $PLIST_DEST
+  sudo rm $PLIST_DEST
+
+EOF
+}
+
+poly_service_setup_note() {
+    cat <<EOF
+ - load and start a LaunchDaemon (at $PLIST_DEST) for nix-daemon
+
+EOF
+}
+
+poly_configure_nix_daemon_service() {
+    _sudo "to set up the nix-daemon as a LaunchDaemon" \
+          ln -sfn "/nix/var/nix/profiles/default$PLIST_DEST" "$PLIST_DEST"
+
+    _sudo "to load the LaunchDaemon plist for nix-daemon" \
+          launchctl load /Library/LaunchDaemons/org.nixos.nix-daemon.plist
+
+    _sudo "to start the nix-daemon" \
+          launchctl start org.nixos.nix-daemon
+
+}
+
+poly_group_exists() {
+    /usr/bin/dscl . -read "/Groups/$1" > /dev/null 2>&1
+}
+
+poly_group_id_get() {
+    dsclattr "/Groups/$1" "PrimaryGroupID"
+}
+
+poly_create_build_group() {
+    _sudo "Create the Nix build group, $NIX_BUILD_GROUP_NAME" \
+          /usr/sbin/dseditgroup -o create \
+          -r "Nix build group for nix-daemon" \
+          -i "$NIX_BUILD_GROUP_ID" \
+          "$NIX_BUILD_GROUP_NAME" >&2
+}
+
+poly_user_exists() {
+    /usr/bin/dscl . -read "/Users/$1" > /dev/null 2>&1
+}
+
+poly_user_id_get() {
+    dsclattr "/Users/$1" "UniqueID"
+}
+
+poly_user_hidden_get() {
+    dsclattr "/Users/$1" "IsHidden"
+}
+
+poly_user_hidden_set() {
+    _sudo "in order to make $1 a hidden user" \
+          /usr/bin/dscl . -create "/Users/$1" "IsHidden" "1"
+}
+
+poly_user_home_get() {
+    dsclattr "/Users/$1" "NFSHomeDirectory"
+}
+
+poly_user_home_set() {
+    _sudo "in order to give $1 a safe home directory" \
+          /usr/bin/dscl . -create "/Users/$1" "NFSHomeDirectory" "$2"
+}
+
+poly_user_note_get() {
+    dsclattr "/Users/$1" "RealName"
+}
+
+poly_user_note_set() {
+    _sudo "in order to give $username a useful note" \
+          /usr/bin/dscl . -create "/Users/$1" "RealName" "$2"
+}
+
+poly_user_shell_get() {
+    dsclattr "/Users/$1" "UserShell"
+}
+
+poly_user_shell_set() {
+    _sudo "in order to give $1 a safe home directory" \
+          /usr/bin/dscl . -create "/Users/$1" "UserShell" "$2"
+}
+
+poly_user_in_group_check() {
+    username=$1
+    group=$2
+    dseditgroup -o checkmember -m "$username" "$group" > /dev/null 2>&1
+}
+
+poly_user_in_group_set() {
+    username=$1
+    group=$2
+
+    _sudo "Add $username to the $group group"\
+          /usr/sbin/dseditgroup -o edit -t user \
+          -a "$username" "$group"
+}
+
+poly_user_primary_group_get() {
+    dsclattr "/Users/$1" "PrimaryGroupID"
+}
+
+poly_user_primary_group_set() {
+    _sudo "to let the nix daemon use this user for builds (this might seem redundant, but there are two concepts of group membership)" \
+          /usr/bin/dscl . -create "/Users/$1" "PrimaryGroupID" "$2"
+}
+
+poly_create_build_user() {
+    username=$1
+    uid=$2
+    _builder_num=$3
+
+    _sudo "Creating the Nix build user, $username" \
+          /usr/bin/dscl . create "/Users/$username" \
+          UniqueID "${uid}"
+}
 
 if [ -t 0 ]; then
     readonly IS_HEADLESS='no'
@@ -70,15 +208,9 @@ uninstall_directions() {
     subheader "Uninstalling nix:"
     local step=0
 
-    if [ -e "$PLIST_DEST" ]; then
+    if poly_service_installed_check; then
         step=$((step + 1))
-        cat <<EOF
-$step. Delete $PLIST_DEST
-
-  sudo launchctl unload $PLIST_DEST
-  sudo rm $PLIST_DEST
-
-EOF
+        poly_service_uninstall_directions "$step"
     fi
 
     for profile_target in "${PROFILE_TARGETS[@]}"; do
@@ -114,11 +246,6 @@ nix_user_for_core() {
 
 nix_uid_for_core() {
     echo $((NIX_FIRST_BUILD_UID + $1 - 1))
-}
-
-dsclattr() {
-    /usr/bin/dscl . -read "$1" \
-        | awk "/$2/ { print \$2 }"
 }
 
 _textout() {
@@ -274,9 +401,7 @@ EOF
 
 
 validate_starting_assumptions() {
-    if [ "$(uname -s)" != "Darwin" ]; then
-        failure "This script is for use with macOS!"
-    fi
+    poly_validate_assumptions
 
     if [ $EUID -eq 0 ]; then
         failure <<EOF
@@ -430,15 +555,11 @@ create_build_group() {
     local primary_group_id
 
     task "Setting up the build group $NIX_BUILD_GROUP_NAME"
-    if ! /usr/bin/dscl . -read "/Groups/$NIX_BUILD_GROUP_NAME" > /dev/null 2>&1; then
-        _sudo "Create the Nix build group, $NIX_BUILD_GROUP_NAME" \
-              /usr/sbin/dseditgroup -o create \
-              -r "Nix build group for nix-daemon" \
-              -i "$NIX_BUILD_GROUP_ID" \
-              "$NIX_BUILD_GROUP_NAME" >&2
+    if ! poly_group_exists "$NIX_BUILD_GROUP_NAME"; then
+        poly_create_build_group
         row "            Created" "Yes"
     else
-        primary_group_id=$(dsclattr "/Groups/$NIX_BUILD_GROUP_NAME" "PrimaryGroupID")
+        primary_group_id=$(poly_group_id_get "$NIX_BUILD_GROUP_NAME")
         if [ "$primary_group_id" -ne "$NIX_BUILD_GROUP_ID" ]; then
             failure <<EOF
 It seems the build group $NIX_BUILD_GROUP_NAME already exists, but
@@ -463,17 +584,14 @@ create_build_user_for_core() {
     coreid="$1"
     username=$(nix_user_for_core "$coreid")
     uid=$(nix_uid_for_core "$coreid")
-    dsclpath="/Users/$username"
 
     task "Setting up the build user $username"
 
-    if ! /usr/bin/dscl . -read "$dsclpath" > /dev/null 2>&1; then
-        _sudo "Creating the Nix build user, $username" \
-              /usr/bin/dscl . create "$dsclpath" \
-              UniqueID "${uid}"
+    if ! poly_user_exists "$username"; then
+        poly_create_build_user "$username" "$uid" "$coreid"
         row "           Created" "Yes"
     else
-        actual_uid=$(dsclattr "$dsclpath" "UniqueID")
+        actual_uid=$(poly_user_id_get "$username")
         if [ "$actual_uid" -ne "$uid" ]; then
             failure <<EOF
 It seems the build user $username already exists, but with the UID
@@ -490,54 +608,46 @@ EOF
         fi
     fi
 
-    if [ "$(dsclattr "$dsclpath" "IsHidden")" = "1" ]; then
-        row "          IsHidden" "Yes"
+    if [ "$(poly_user_hidden_get "$username")" = "1" ]; then
+        row "            Hidden" "Yes"
     else
-        _sudo "in order to make $username a hidden user" \
-              /usr/bin/dscl . -create "$dsclpath" "IsHidden" "1"
-        row "          IsHidden" "Yes"
+        poly_user_hidden_set "$username"
+        row "            Hidden" "Yes"
     fi
 
-    if [ "$(dsclattr "$dsclpath" "NFSHomeDirectory")" = "/var/empty" ]; then
-        row "          NFSHomeDirectory" "/var/empty"
+    if [ "$(poly_user_home_get "$username")" = "/var/empty" ]; then
+        row "    Home Directory" "/var/empty"
     else
-        _sudo "in order to give $username a safe home directory" \
-              /usr/bin/dscl . -create "$dsclpath" "NFSHomeDirectory" "/var/empty"
-        row "          NFSHomeDirectory" "/var/empty"
+        poly_user_home_set "$username" "/var/empty"
+        row "    Home Directory" "/var/empty"
     fi
 
-    if [ "$(dsclattr "$dsclpath" "RealName")" = "Nix build user $coreid" ]; then
-        row "          RealName" "Nix build user $coreid"
+    if [ "$(poly_user_note_get)" = "Nix build user $coreid" ]; then
+        row "              Note" "Nix build user $coreid"
     else
-        _sudo "in order to give $username a useful name" \
-              /usr/bin/dscl . -create "$dsclpath" "RealName" "Nix build user $coreid"
-        row "          RealName" "Nix build user $coreid"
+        poly_user_note_set "$username" "Nix build user $2"
+        row "              Note" "Nix build user $coreid"
     fi
 
-    if [ "$(dsclattr "$dsclpath" "UserShell")" = "/sbin/nologin" ]; then
+    if [ "$(poly_user_shell_get "$username")" = "/sbin/nologin" ]; then
         row "   Logins Disabled" "Yes"
     else
-        _sudo "in order to prevent $username from logging in" \
-              /usr/bin/dscl . -create "$dsclpath" "UserShell" "/sbin/nologin"
+        poly_user_shell_set "$username" "/sbin/nologin"
         row "   Logins Disabled" "Yes"
     fi
 
-    if dseditgroup -o checkmember -m "$username" "$NIX_BUILD_GROUP_NAME" > /dev/null 2>&1 ; then
+    if poly_user_in_group_check "$username" "$NIX_BUILD_GROUP_NAME"; then
         row "  Member of $NIX_BUILD_GROUP_NAME" "Yes"
     else
-        _sudo "Add $username to the $NIX_BUILD_GROUP_NAME group"\
-            /usr/sbin/dseditgroup -o edit -t user \
-            -a "$username" "$NIX_BUILD_GROUP_NAME"
+        poly_user_in_group_set "$username" "$NIX_BUILD_GROUP_NAME"
         row "  Member of $NIX_BUILD_GROUP_NAME" "Yes"
     fi
 
-    if [ "$(dsclattr "$dsclpath" "PrimaryGroupID")" = "$NIX_BUILD_GROUP_ID" ]; then
+    if [ "$(poly_user_primary_group_get "$username")" = "$NIX_BUILD_GROUP_ID" ]; then
         row "    PrimaryGroupID" "$NIX_BUILD_GROUP_ID"
     else
-        _sudo "to let the nix daemon use this user for builds (this might seem redundant, but there are two concepts of group membership)" \
-              /usr/bin/dscl . -create "$dsclpath" "PrimaryGroupID" "$NIX_BUILD_GROUP_ID"
+        poly_user_primary_group_set "$username" "$NIX_BUILD_GROUP_ID"
         row "    PrimaryGroupID" "$NIX_BUILD_GROUP_ID"
-
     fi
 }
 
@@ -624,10 +734,7 @@ EOF
 EOF
             fi
         done
-        cat <<EOF
- - load and start a LaunchDaemon (at $PLIST_DEST) for nix-daemon
-
-EOF
+        poly_service_setup_note
         if ! ui_confirm "Ready to continue?"; then
             failure <<EOF
 Okay, maybe you would like to talk to the team.
@@ -762,19 +869,6 @@ EOF
           install -m 0664 "$SCRATCH/nix.conf" /etc/nix/nix.conf
 }
 
-configure_nix_daemon_plist() {
-    _sudo "to set up the nix-daemon as a LaunchDaemon" \
-          ln -sfn "/nix/var/nix/profiles/default$PLIST_DEST" "$PLIST_DEST"
-
-    _sudo "to load the LaunchDaemon plist for nix-daemon" \
-          launchctl load /Library/LaunchDaemons/org.nixos.nix-daemon.plist
-
-    _sudo "to start the nix-daemon" \
-          launchctl start org.nixos.nix-daemon
-
-}
-
-
 main() {
     welcome_to_nix
     chat_about_sudo
@@ -806,7 +900,7 @@ main() {
 
     setup_default_profile
     place_nix_configuration
-    configure_nix_daemon_plist
+    poly_configure_nix_daemon_service
 
     trap finish_success EXIT
 }

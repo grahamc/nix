@@ -3,6 +3,15 @@
 set -eu
 set -o pipefail
 
+# Sourced from:
+# - https://github.com/LnL7/nix-darwin/blob/8c29d0985d74b4a990238497c47a2542a5616b3c/bootstrap.sh
+# - https://gist.github.com/expipiplus1/e571ce88c608a1e83547c918591b149f/ac504c6c1b96e65505fbda437a28ce563408ecb0
+# - https://github.com/NixOS/nixos-org-configurations/blob/a122f418797713d519aadf02e677fce0dc1cb446/delft/scripts/nix-mac-installer.sh
+# - https://github.com/matthewbauer/macNixOS/blob/f6045394f9153edea417be90c216788e754feaba/install-macNixOS.sh
+# - https://gist.github.com/LnL7/9717bd6cdcb30b086fd7f2093e5f8494/86b26f852ce563e973acd30f796a9a416248c34a
+#
+# however tracking which bits came from which would be impossible.
+
 readonly ESC='\033[0m'
 readonly BOLD='\033[38;1m'
 readonly BLUE='\033[38;34m'
@@ -37,7 +46,151 @@ readonly NIX_INSTALLED_NIX="@nix@"
 readonly NIX_INSTALLED_CACERT="@cacert@"
 readonly EXTRACTED_NIX_PATH="$(dirname "$0")"
 
-readonly ROOT_HOME="/root"
+readonly ROOT_HOME=$(echo ~root)
+
+poly_validate_assumptions() {
+    if [ "$(uname -s)" != "Linux" ]; then
+        failure "This script is for use with Linux!"
+    fi
+}
+
+poly_service_installed_check() {
+    # !!! TODO: check use systemd is-linked / is-installed maybe?
+    return [ -e "$SERVICE_DEST" || -e "$SOCKET_DEST" ]
+}
+
+poly_service_uninstall_directions() {
+        cat <<EOF
+$1. Delete $SERVICE_DEST and $SOCKET_DEST
+
+  !!! TODO Don't `rm`, use `disable` and `unlink`???
+  sudo systemctl stop nix-daemon.service
+  sudo systemctl stop nix-daemon.socket
+  sudo systemctl daemon-reload
+  sudo rm $SERVICE_DEST $SOCKET_DEST
+EOF
+}
+
+poly_service_setup_note() {
+    cat <<EOF
+ - load and start a service (at $SERVICE_DEST
+   and $SOCKET_DEST) for nix-daemon
+
+EOF
+}
+
+polxy_configure_nix_daemon_service() {
+    _sudo "to set up the nix-daemon service" \
+          systemctl link "/nix/var/nix/profiles/default$SERVICE_SRC"
+
+    _sudo "to set up the nix-daemon socket service" \
+          systemctl enable "/nix/var/nix/profiles/default$SOCKET_SRC"
+
+    _sudo "to load the systemd unit for nix-daemon" \
+          systemctl daemon-reload
+
+    _sudo "to start the nix-daemon.socket" \
+          systemctl start nix-daemon.socket
+
+    _sudo "to start the nix-daemon.service" \
+          systemctl start nix-daemon.service
+
+}
+
+poly_group_exists() {
+    getent group "$1" > /dev/null 2>&1
+}
+
+poly_group_id_get() {
+    getent group "$1" | cut -d: -f3
+}
+
+poly_create_build_group() {
+    _sudo "Create the Nix build group, $NIX_BUILD_GROUP_NAME" \
+          groupadd -g "$NIX_BUILD_GROUP_ID" --system \
+          "$NIX_BUILD_GROUP_NAME" >&2
+}
+
+poly_user_exists() {
+    getent passwd "$1" > /dev/null 2>&1
+}
+
+poly_user_id_get() {
+    getent passwd "$1" | cut -d: -f3
+}
+
+poly_user_hidden_get() {
+    1
+}
+
+poly_user_hidden_set() {
+    true
+}
+
+poly_user_home_get() {
+    getent passwd "$1" | cut -d: -f6
+}
+
+poly_user_home_set() {
+    _sudo "in order to give $1 a safe home directory" \
+          usermod --home "$2" "$1"
+}
+
+poly_user_note_get() {
+    getent passwd "$1" | cut -d: -f5
+}
+
+poly_user_note_set() {
+    _sudo "in order to give $1 a useful comment" \
+          usermod --comment "$2" "$1"
+}
+
+poly_user_shell_get() {
+    getent passwd "$1" | cut -d: -f7
+}
+
+poly_user_shell_set() {
+    _sudo "in order to prevent $1 from logging in" \
+          usermod --shell "$2" "$1"
+}
+
+poly_user_in_group_check() {
+    groups "$1" | grep -q "$2" > /dev/null 2>&1
+}
+
+poly_user_in_group_set() {
+    _sudo "Add $1 to the $2 group"\
+          usermod --append --groups "$2" "$1"
+}
+
+poly_user_primary_group_get() {
+    getent passwd "$1" | cut -d: -f4
+}
+
+poly_user_primary_group_set() {
+    _sudo "to let the nix daemon use this user for builds (this might seem redundant, but there are two concepts of group membership)" \
+          usermod --gid "$2" "$1"
+
+}
+
+poly_create_build_user() {
+    username=$1
+    uid=$2
+    builder_num=$3
+
+    _sudo "Creating the Nix build user, $username" \
+          useradd \
+          --home-dir /var/empty \
+          --comment "Nix build user $builder_num" \
+          --gid "$NIX_BUILD_GROUP_ID" \
+          --groups "$NIX_BUILD_GROUP_NAME" \
+          --no-user-group \
+          --system \
+          --shell /sbin/nologin \
+          --uid "$uid" \
+          --password "!" \
+          "$username"
+}
 
 if [ -t 0 ]; then
     readonly IS_HEADLESS='no'
@@ -67,28 +220,9 @@ uninstall_directions() {
     subheader "Uninstalling nix:"
     local step=0
 
-    if [ -e "$SERVICE_DEST" ]; then
+    if poly_service_installed_check; then
         step=$((step + 1))
-        cat <<EOF
-$step. Delete $SERVICE_DEST
-
-  sudo systemctl stop nix-daemon.service
-  sudo systemctl daemon-reload
-  sudo rm $SERVICE_DEST
-
-EOF
-    fi
-
-    if [ -e "$SOCKET_DEST" ]; then
-        step=$((step + 1))
-        cat <<EOF
-$step. Delete $SOCKET_DEST
-
-  sudo systemctl stop nix-daemon.socket
-  sudo systemctl daemon-reload
-  sudo rm $SOCKET_DEST
-
-EOF
+        poly_service_uninstall_directions "$step"
     fi
 
     for profile_target in "${PROFILE_TARGETS[@]}"; do
@@ -279,9 +413,7 @@ EOF
 
 
 validate_starting_assumptions() {
-    if [ "$(uname -s)" != "Linux" ]; then
-        failure "This script is for use with Linux!"
-    fi
+    poly_validate_assumptions
 
     if [ $EUID -eq 0 ]; then
         failure <<EOF
@@ -435,13 +567,11 @@ create_build_group() {
     local primary_group_id
 
     task "Setting up the build group $NIX_BUILD_GROUP_NAME"
-    if ! getent group "$NIX_BUILD_GROUP_NAME" > /dev/null 2>&1; then
-        _sudo "Create the Nix build group, $NIX_BUILD_GROUP_NAME" \
-              groupadd -g "$NIX_BUILD_GROUP_ID" --system \
-              "$NIX_BUILD_GROUP_NAME" >&2
+    if ! poly_group_exists "$NIX_BUILD_GROUP_NAME"; then
+        poly_create_build_group
         row "            Created" "Yes"
     else
-        primary_group_id=$(getent group "$NIX_BUILD_GROUP_NAME" | cut -d: -f3)
+        primary_group_id=$(poly_group_id_get "$NIX_BUILD_GROUP_NAME")
         if [ "$primary_group_id" -ne "$NIX_BUILD_GROUP_ID" ]; then
             failure <<EOF
 It seems the build group $NIX_BUILD_GROUP_NAME already exists, but
@@ -469,22 +599,11 @@ create_build_user_for_core() {
 
     task "Setting up the build user $username"
 
-    if ! getent passwd "$username" > /dev/null 2>&1; then
-        _sudo "Creating the Nix build user, $username" \
-              useradd \
-              --home-dir /var/empty \
-              --comment "Nix build user $coreid" \
-              --gid "$NIX_BUILD_GROUP_ID" \
-              --groups "$NIX_BUILD_GROUP_NAME" \
-              --no-user-group \
-              --system \
-              --shell /sbin/nologin \
-              --uid "$uid" \
-              --password "!" \
-              "$username"
+    if ! poly_user_exists "$username"; then
+        poly_create_build_user "$username" "$uid" "$coreid"
         row "           Created" "Yes"
     else
-        actual_uid=$(getent passwd "$username" | cut -d: -f3)
+        actual_uid=$(poly_user_id_get "$username")
         if [ "$actual_uid" -ne "$uid" ]; then
             failure <<EOF
 It seems the build user $username already exists, but with the UID
@@ -501,45 +620,46 @@ EOF
         fi
     fi
 
-    if [ "$(getent passwd "$username" | cut -d: -f6)" = "/var/empty" ]; then
+    if [ "$(poly_user_hidden_get "$username")" = "1" ]; then
+        row "            Hidden" "Yes"
+    else
+        poly_user_hidden_set "$username"
+        row "            Hidden" "Yes"
+    fi
+
+    if [ "$(poly_user_home_get "$username")" = "/var/empty" ]; then
         row "    Home Directory" "/var/empty"
     else
-        _sudo "in order to give $username a safe home directory" \
-              usermod --home "/var/empty" "$username"
+        poly_user_home_set "$username" "/var/empty"
         row "    Home Directory" "/var/empty"
     fi
 
-    if [ "$(getent passwd "$username" | cut -d: -f5)" = "Nix build user $coreid" ]; then
-        row "          RealName" "Nix build user $coreid"
+    if [ "$(poly_user_note_get)" = "Nix build user $coreid" ]; then
+        row "              Note" "Nix build user $coreid"
     else
-        _sudo "in order to give $username a useful comment" \
-              usermod --comment "Nix build user $coreid" "$username"
-        row "          RealName" "Nix build user $coreid"
+        poly_user_note_set "$username" "Nix build user $2"
+        row "              Note" "Nix build user $coreid"
     fi
 
-    if [ "$(getent passwd "$username" | cut -d: -f7)" = "/sbin/nologin" ]; then
+    if [ "$(poly_user_shell_get "$username")" = "/sbin/nologin" ]; then
         row "   Logins Disabled" "Yes"
     else
-        _sudo "in order to prevent $username from logging in" \
-              usermod --shell /sbin/nologin "$username"
+        poly_user_shell_set "$username" "/sbin/nologin"
         row "   Logins Disabled" "Yes"
     fi
 
-    if groups "$username" | grep -q "$NIX_BUILD_GROUP_NAME" > /dev/null 2>&1 ; then
+    if poly_user_in_group_check "$username" "$NIX_BUILD_GROUP_NAME"; then
         row "  Member of $NIX_BUILD_GROUP_NAME" "Yes"
     else
-        _sudo "Add $username to the $NIX_BUILD_GROUP_NAME group"\
-              usermod --append --groups "$NIX_BUILD_GROUP_NAME" "$username"
+        poly_user_in_group_set "$username" "$NIX_BUILD_GROUP_NAME"
         row "  Member of $NIX_BUILD_GROUP_NAME" "Yes"
     fi
 
-    if [ "$(getent passwd "$username" | cut -d: -f4)" = "$NIX_BUILD_GROUP_ID" ]; then
+    if [ "$(poly_user_primary_group_get "$username")" = "$NIX_BUILD_GROUP_ID" ]; then
         row "    PrimaryGroupID" "$NIX_BUILD_GROUP_ID"
     else
-        _sudo "to let the nix daemon use this user for builds (this might seem redundant, but there are two concepts of group membership)" \
-              usermod --gid "$NIX_BUILD_GROUP_ID" "$username"
+        poly_user_primary_group_set "$username" "$NIX_BUILD_GROUP_ID"
         row "    PrimaryGroupID" "$NIX_BUILD_GROUP_ID"
-
     fi
 }
 
@@ -626,11 +746,7 @@ EOF
 EOF
             fi
         done
-        cat <<EOF
- - load and start a service (at $SERVICE_DEST
-   and $SOCKET_DEST) for nix-daemon
-
-EOF
+        poly_service_setup_note
         if ! ui_confirm "Ready to continue?"; then
             failure <<EOF
 Okay, maybe you would like to talk to the team.
@@ -765,25 +881,6 @@ EOF
           install -m 0664 "$SCRATCH/nix.conf" /etc/nix/nix.conf
 }
 
-configure_nix_daemon_plist() {
-    _sudo "to set up the nix-daemon service" \
-          systemctl link "/nix/var/nix/profiles/default$SERVICE_SRC"
-
-    _sudo "to set up the nix-daemon socket service" \
-          systemctl enable "/nix/var/nix/profiles/default$SOCKET_SRC"
-
-    _sudo "to load the systemd unit for nix-daemon" \
-          systemctl daemon-reload
-
-    _sudo "to start the nix-daemon.socket" \
-          systemctl start nix-daemon.socket
-
-    _sudo "to start the nix-daemon.service" \
-          systemctl start nix-daemon.service
-
-}
-
-
 main() {
     welcome_to_nix
     chat_about_sudo
@@ -815,7 +912,7 @@ main() {
 
     setup_default_profile
     place_nix_configuration
-    configure_nix_daemon_plist
+    poly_configure_nix_daemon_service
 
     trap finish_success EXIT
 }
