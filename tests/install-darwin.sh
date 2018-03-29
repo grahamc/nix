@@ -52,12 +52,6 @@ function finish {
 trap finish EXIT
 
 # First setup Nix
-cleanup
-curl -o install https://nixos.org/nix/install
-yes | bash ./install
-verify
-
-
 (
     set +e
     (
