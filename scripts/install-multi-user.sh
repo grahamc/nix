@@ -734,9 +734,9 @@ main() {
     if [ "$(uname -s)" = "Darwin" ]; then
         # shellcheck source=./install-darwin-multi-user.sh
         . "$EXTRACTED_NIX_PATH/install-darwin-multi-user.sh"
-    elif [ "$(uname -s)" = "Linux" ] && grep -q systemd /proc/1/cmdline; then
-        # shellcheck source=./install-centos7-multi-user.sh
-        . "$EXTRACTED_NIX_PATH/install-centos7-multi-user.sh"
+    elif [ "$(uname -s)" = "Linux" ] && [ -e /run/systemd/system ]; then
+        # shellcheck source=./install-systemd-multi-user.sh
+        . "$EXTRACTED_NIX_PATH/install-systemd-multi-user.sh"
     else
         failure "Sorry, I don't know what to do on $(uname)"
     fi

@@ -34,16 +34,11 @@ if [ "$(uname -s)" = "Darwin" ]; then
     exit 0
 fi
 
-# CentOS 7 support
-if [ "$(uname -s)" = "Linux" ]; then
-    vers=$(awk -F= 'BEGIN {ORS="" }
-                    $1=="ID" || $1=="VERSION_ID" {print $2}' \
-               /etc/os-release)
-    if [ "$vers" = '"centos""7"' ]; then
-        printf '\e[1;31mSwitching to the Multi-User Installer\e[0m\n'
-        exec "$self/install-multi-user"
-        exit 0
-    fi
+# Linux & Systemd support
+if [ "$(uname -s)" = "Linux" ] && [ -e /run/systemd/system ]; then
+    printf '\e[1;31mSwitching to the Multi-User Installer\e[0m\n'
+    exec "$self/install-multi-user"
+    exit 0
 fi
 
 if [ "$(id -u)" -eq 0 ]; then

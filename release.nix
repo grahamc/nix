@@ -130,7 +130,7 @@ let
           substitute ${./scripts/install-darwin-multi-user.sh} $TMPDIR/install-darwin-multi-user.sh \
             --subst-var-by nix ${toplevel} \
             --subst-var-by cacert ${cacert}
-          substitute ${./scripts/install-centos7-multi-user.sh} $TMPDIR/install-centos7-multi-user.sh \
+          substitute ${./scripts/install-systemd-multi-user.sh} $TMPDIR/install-systemd-multi-user.sh \
             --subst-var-by nix ${toplevel} \
             --subst-var-by cacert ${cacert}
           substitute ${./scripts/install-multi-user.sh} $TMPDIR/install-multi-user \
@@ -140,13 +140,13 @@ let
           if type -p shellcheck; then
             shellcheck -e SC1090 $TMPDIR/install
             shellcheck $TMPDIR/install-darwin-multi-user.sh
-            shellcheck $TMPDIR/install-centos7-multi-user.sh
+            shellcheck $TMPDIR/install-systemd-multi-user.sh
             shellcheck -x -e SC1091,SC2002,SC2116 $TMPDIR/install-multi-user
           fi
 
           chmod +x $TMPDIR/install
           chmod +x $TMPDIR/install-darwin-multi-user.sh
-          chmod +x $TMPDIR/install-centos7-multi-user.sh
+          chmod +x $TMPDIR/install-systemd-multi-user.sh
           chmod +x $TMPDIR/install-multi-user
           dir=nix-${version}-${system}
           fn=$out/$dir.tar.bz2
@@ -160,7 +160,7 @@ let
             --transform "s,$TMPDIR/reginfo,$dir/.reginfo," \
             --transform "s,$NIX_STORE,$dir/store,S" \
             $TMPDIR/install $TMPDIR/install-darwin-multi-user.sh \
-            $TMPDIR/install-centos7-multi-user.sh \
+            $TMPDIR/install-systemd-multi-user.sh \
             $TMPDIR/install-multi-user $TMPDIR/reginfo \
             $(cat ${installerClosureInfo}/store-paths)
         '');
