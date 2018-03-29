@@ -486,7 +486,7 @@ EOF
     if [ "$(poly_user_note_get "$username")" = "Nix build user $coreid" ]; then
         row "              Note" "Nix build user $coreid"
     else
-        poly_user_note_set "$username" "Nix build user $2"
+        poly_user_note_set "$username" "Nix build user $coreid"
         row "              Note" "Nix build user $coreid"
     fi
 
