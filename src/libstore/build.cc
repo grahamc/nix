@@ -797,6 +797,9 @@ private:
     /* Whether this is a fixed-output derivation. */
     bool fixedOutput;
 
+    /* Whether this is a dirty nasty derivation which isn't fixed output but has networking. */
+    bool dirtyNastyPrivateNetworkingDisabled;
+
     /* Whether to run the build in a private network namespace. */
     bool privateNetwork = false;
 
@@ -1318,6 +1321,11 @@ void DerivationGoal::inputsRealised()
 
     /* Is this a fixed-output derivation? */
     fixedOutput = drv->isFixedOutput();
+
+    dirtyNastyPrivateNetworkingDisabled = (
+        get(drv->env, "__turnOffPrivateNetwork") == "1"
+        && get(drv->env, "__IllBeGoodISwear") == "1"
+        && get(drv->env, "__DontHurtMe") == "1");
 
     /* Don't repeat fixed-output derivations since they're already
        verified by their output hash.*/
@@ -1990,7 +1998,7 @@ void DerivationGoal::startBuilder()
                 "nogroup:x:65534:\n") % sandboxGid).str());
 
         /* Create /etc/hosts with localhost entry. */
-        if (!fixedOutput)
+        if (!fixedOutput && !dirtyNastyPrivateNetworkingDisabled)
             writeFile(chrootRootDir + "/etc/hosts", "127.0.0.1 localhost\n");
 
         /* Make the closure of the inputs available in the chroot,
@@ -2163,15 +2171,8 @@ void DerivationGoal::startBuilder()
            us.
         */
 
-        if (!fixedOutput)
+        if (!fixedOutput && !dirtyNastyPrivateNetworkingDisabled)
             privateNetwork = true;
-
-        if (get(drv->env, "__turnOffPrivateNetwork") == "1"
-            && get(drv->env, "__IllBeGoodISwear") == "1"
-            && get(drv->env, "__DontHurtMe") == "1") {
-            privateNetwork = false;
-        }
-
 
         userNamespaceSync.create();
 
@@ -2343,7 +2344,7 @@ void DerivationGoal::initEnv()
        to the builder is generally impure, but the output of
        fixed-output derivations is by definition pure (since we
        already know the cryptographic hash of the output). */
-    if (fixedOutput) {
+    if (fixedOutput || dirtyNastyPrivateNetworkingDisabled) {
         Strings varNames = tokenizeString<Strings>(get(drv->env, "impureEnvVars"));
         for (auto & i : varNames) env[i] = getEnv(i);
     }
@@ -2631,7 +2632,7 @@ void DerivationGoal::runChild()
             /* Fixed-output derivations typically need to access the
                network, so give them access to /etc/resolv.conf and so
                on. */
-            if (fixedOutput) {
+            if (fixedOutput || dirtyNastyPrivateNetworkingDisabled) {
                 ss.push_back("/etc/resolv.conf");
                 ss.push_back("/etc/nsswitch.conf");
                 ss.push_back("/etc/services");
@@ -2851,7 +2852,7 @@ void DerivationGoal::runChild()
 
                 sandboxProfile += "(import \"sandbox-defaults.sb\")\n";
 
-                if (fixedOutput)
+                if (fixedOutput || dirtyNastyPrivateNetworkingDisabled)
                     sandboxProfile += "(import \"sandbox-network.sb\")\n";
 
                 /* Our rwx outputs */
