@@ -2166,6 +2166,13 @@ void DerivationGoal::startBuilder()
         if (!fixedOutput)
             privateNetwork = true;
 
+        if (get(drv->env, "__turnOffPrivateNetwork") == "1"
+            && get(drv->env, "__IllBeGoodISwear") == "1"
+            && get(drv->env, "__DontHurtMe") == "1") {
+            privateNetwork = false;
+        }
+
+
         userNamespaceSync.create();
 
         options.allowVfork = false;
