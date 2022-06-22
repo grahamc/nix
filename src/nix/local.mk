@@ -13,10 +13,11 @@ nix_SOURCES := \
   $(wildcard src/nix-env/*.cc) \
   $(wildcard src/nix-instantiate/*.cc) \
   $(wildcard src/nix-store/*.cc) \
+  nix-rust/libnixrust.rs.cc \
 
-nix_CXXFLAGS += -I src/libutil -I src/libstore -I src/libfetchers -I src/libexpr -I src/libmain -I src/libcmd -I doc/manual
+nix_CXXFLAGS += -I src/libutil -I src/libstore -I src/libfetchers -I src/libexpr -I src/libmain -I src/libcmd -I doc/manual -I nix-rust
 
-nix_LIBS = libexpr libmain libfetchers libstore libutil libcmd
+nix_LIBS = libexpr libmain libfetchers libstore libutil libcmd libnixrust
 
 nix_LDFLAGS = -pthread $(SODIUM_LIBS) $(EDITLINE_LIBS) $(BOOST_LDFLAGS) -llowdown
 

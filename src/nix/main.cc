@@ -11,6 +11,7 @@
 #include "finally.hh"
 #include "loggers.hh"
 #include "markdown.hh"
+#include "libnixrust.rs.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
