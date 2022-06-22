@@ -90,8 +90,10 @@
 
         nativeBuildDeps =
           [
+            buildPackages.cxx-build
             buildPackages.bison
             buildPackages.flex
+            buildPackages.cargo
             (lib.getBin buildPackages.lowdown-nix)
             buildPackages.mdbook
             buildPackages.autoconf-archive
@@ -398,6 +400,30 @@
                   PREFIX=${placeholder "dev"} \
                   BINDIR=${placeholder "bin"}/bin
             '';
+          };
+
+          cxx-build = final.rustPlatform.buildRustPackage rec {
+            pname = "cxx-build";
+            version = "1.0.69";
+
+            src = final.fetchFromGitHub {
+              owner = "dtolnay";
+              repo = "cxx";
+              rev = version;
+              hash = "sha256-rQv+DYkOCr3tOwZMwuvm3xZkemp++8yvFZypS+LElkU=";
+            };
+
+
+            postPatch = ''
+              cat ${cargoLock.lockFile} > Cargo.lock
+              pushd gen/cmd
+            '';
+
+            postBuild = ''
+              popd
+            '';
+
+            cargoLock.lockFile = ./cxx.cargo.lock;
           };
         };
 
