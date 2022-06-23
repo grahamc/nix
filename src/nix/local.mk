@@ -13,13 +13,15 @@ nix_SOURCES := \
   $(wildcard src/nix-env/*.cc) \
   $(wildcard src/nix-instantiate/*.cc) \
   $(wildcard src/nix-store/*.cc) \
-  nix-rust/libnixrust.rs.cc \
+  nix-rust/target/cxxbridge/nixrust/src/lib.rs.cc \
 
-nix_CXXFLAGS += -I src/libutil -I src/libstore -I src/libfetchers -I src/libexpr -I src/libmain -I src/libcmd -I doc/manual -I nix-rust
+nix_CXXFLAGS += -I src/libutil -I src/libstore -I src/libfetchers -I src/libexpr -I src/libmain -I src/libcmd -I doc/manual -I nix-rust/target/cxxbridge
 
 nix_LIBS = libexpr libmain libfetchers libstore libutil libcmd libnixrust
 
 nix_LDFLAGS = -pthread $(SODIUM_LIBS) $(EDITLINE_LIBS) $(BOOST_LDFLAGS) -llowdown
+
+# nix_ORDER_AFTER = nix-rust/libnixrust.rs.h nix-rust/cxx.h
 
 $(foreach name, \
   nix-build nix-channel nix-collect-garbage nix-copy-closure nix-daemon nix-env nix-hash nix-instantiate nix-prefetch-url nix-shell nix-store, \

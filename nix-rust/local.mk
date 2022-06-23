@@ -46,10 +46,3 @@ check: rust-tests
 rust-tests:
 	$(trace-test) cd nix-rust && CARGO_HOME=$$(if [[ -d vendor ]]; then echo vendor; fi) cargo test --release $$(if [[ -d vendor ]]; then echo --offline; fi)
 endif
-
-$(d)/libnixrust.rs.h: $(d)/src/lib.rs
-	$(trace-gen) cxxbridge nix-rust/src/lib.rs --header > $@
-
-$(d)/libnixrust.rs.cc: $(d)/src/lib.rs
-	$(trace-gen) cxxbridge nix-rust/src/lib.rs > $@
-

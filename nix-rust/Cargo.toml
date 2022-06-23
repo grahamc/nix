@@ -10,3 +10,6 @@ crate-type = ["cdylib"] # maybe staticlib?
 
 [dependencies]
 cxx = "1.0.69"
+
+[build-dependencies]
+cxx-build = "1.0.69"
