@@ -19,7 +19,7 @@ nix_CXXFLAGS += -I src/libutil -I src/libstore -I src/libfetchers -I src/libexpr
 
 nix_LIBS = libexpr libmain libfetchers libstore libutil libcmd libnixrust
 
-nix_LDFLAGS = -pthread $(SODIUM_LIBS) $(EDITLINE_LIBS) $(BOOST_LDFLAGS) -llowdown
+nix_LDFLAGS = -pthread $(SODIUM_LIBS) $(EDITLINE_LIBS) $(BOOST_LDFLAGS) -llowdown /home/grahamc/projects/github.com/NixOS/nix/nix-rust/target/release/libnixrust.a
 
 # nix_ORDER_AFTER = nix-rust/libnixrust.rs.h nix-rust/cxx.h
 

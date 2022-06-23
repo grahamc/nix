@@ -239,9 +239,13 @@ struct CmdHelp : Command
 
 static auto rCmdHelp = registerCommand<CmdHelp>("help");
 
+inline std::string_view string_view_from_str(rust::Str s) {
+  return {s.data(), s.size()};
+}
+
 void mainWrapped(int argc, char * * argv)
 {
-    printError("%d", make_thing()->bar().size());
+    printError("%d", string_view_from_str(make_thing()->bar()));
 
     savedArgv = argv;
 
