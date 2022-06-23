@@ -12,6 +12,7 @@
 #include "loggers.hh"
 #include "markdown.hh"
 #include "nixrust/src/lib.rs.h"
+#include "rust/cxx.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -240,6 +241,8 @@ static auto rCmdHelp = registerCommand<CmdHelp>("help");
 
 void mainWrapped(int argc, char * * argv)
 {
+    printError("%d", make_thing()->bar().size());
+
     savedArgv = argv;
 
     /* The chroot helper needs to be run before any threads have been
