@@ -149,9 +149,7 @@ StringSet Settings::getDefaultExtraPlatforms()
     // x86_64 in aarch64 environments or vice versa since they can
     // always exec with their own binary preferences.
     if (pathExists("/Library/Apple/System/Library/LaunchDaemons/com.apple.oahd.plist")) {
-        if (std::string{SYSTEM} == "x86_64-darwin")
-            extraPlatforms.insert("aarch64-darwin");
-        else if (std::string{SYSTEM} == "aarch64-darwin")
+        if (std::string{SYSTEM} == "aarch64-darwin")
             extraPlatforms.insert("x86_64-darwin");
     }
 #endif
